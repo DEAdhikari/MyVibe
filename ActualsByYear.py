@@ -7,16 +7,19 @@ def show_page():
         """
         <style>
         .card {
-            background-color: #f9f9f9;
+            background-color: #90caf9;
             padding: 20px;
             margin-bottom: 25px;
             border-radius: 12px;
             box-shadow: 1px 1px 6px rgba(0,0,0,0.07);
         }
         .card-header {
+            background-color: #90caf9;
+            padding: 10px 15px;
             font-size: 20px;
             font-weight: bold;
-            color: #3b3b3b;
+            color: #1f3b57;
+            border-radius: 8px;
             margin-bottom: 10px;
         }
         </style>
@@ -27,7 +30,6 @@ def show_page():
     st.title("📅 Actuals By Year")
     st.markdown("---")
 
-    # Load and transform data
     excel_file = "BaseDatasheet.xlsx"
     sheet3_df = pd.read_excel(excel_file, sheet_name="Sheet3")
     df_melted = sheet3_df.melt(id_vars=["Total Revenue ($)"], var_name="Year", value_name="Revenue")
@@ -76,21 +78,26 @@ def show_page():
 
         # MINI DASHBOARD SECTION
         with st.container():
-            st.markdown('<div class="card"><div class="card-header">🧭 Mini Dashboard Comparison</div>', unsafe_allow_html=True)
+            st.markdown('<div class="card"><div class="card-header">🧭 ActualsByYear_Mini Dashboard Comparison</div>', unsafe_allow_html=True)
 
             comparison_df = df_melted[df_melted["Month"].isin(selected_months)]
-            year_summary = comparison_df.groupby("Year")["Revenue"].agg(["sum", "mean"]).reset_index()
-            year_summary["Revenue_M"] = year_summary["sum"] / 1_000_000
-            year_summary["Avg_M"] = year_summary["mean"] / 1_000_000
+            year_summary = comparison_df.groupby("Year")["Revenue"].sum().reset_index()
+            year_summary["Revenue_M"] = year_summary["Revenue"] / 1_000_000
 
             comp_cols = st.columns(len(year_summary))
+            previous_rev = None
             for i, row in year_summary.iterrows():
                 with comp_cols[i]:
+                    current_rev = row["Revenue_M"]
+                    delta_val = None if previous_rev is None else current_rev - previous_rev
+                    delta_display = "N/A" if delta_val is None else f"{delta_val:+.1f}M"
                     st.metric(
                         label=f"📅 {row['Year']}",
-                        value=f"{row['Revenue_M']:.1f}M",
-                        delta=f"Avg: {row['Avg_M']:.1f}M"
+                        value=f"{current_rev:.1f}M",
+                        delta=delta_display,
+                        delta_color="normal"
                     )
+                    previous_rev = current_rev
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -119,12 +126,11 @@ def show_page():
             """)
 
             view_mode = st.radio("📊 Choose View Mode:", ["Monthly View", "Quarterly View"])
-
             revenue_target = 5.0
             target_df = filtered_df.copy()
             target_df["Target"] = revenue_target
-
             chart_x = "Month:N" if view_mode == "Monthly View" else "Quarter:N"
+
             base = alt.Chart(filtered_df).encode(
                 x=alt.X(chart_x, sort=available_months),
                 xOffset="Year:N",
@@ -146,7 +152,7 @@ def show_page():
             ).encode(text="RevenueLabel:N")
 
             line = base.mark_line(point=True, strokeDash=[3, 3], strokeWidth=2).encode(y="Revenue_M:Q")
-            zero_line = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(strokeDash=[2,2], color='gray').encode(y='y:Q')
+            zero_line = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(strokeDash=[2, 2], color='gray').encode(y='y:Q')
             target_line = alt.Chart(target_df).mark_line(color="orange", strokeDash=[6, 3]).encode(x=chart_x, y="Target:Q")
             rule = alt.Chart(filtered_df[filtered_df["Month"] == peak_month]).mark_rule(color="gold", strokeDash=[4, 2], strokeWidth=2).encode(x="Month:N")
 
@@ -173,7 +179,7 @@ def show_page():
                 st.markdown('</div>', unsafe_allow_html=True)
 
         st.download_button(
-            "📥 Download Filtered Data",
+            label="📥 Download Filtered Data",
             data=filtered_df.to_csv(index=False),
             file_name="Filtered_Revenue_By_Year.csv",
             mime="text/csv"
